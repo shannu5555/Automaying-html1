@@ -1,0 +1,63 @@
+trigger:
+- main
+
+variables:
+  imageName: html-app
+  acrName: sagiracr001
+  kubernetesNamespace: default
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: BuildAndPush
+  jobs:
+  - job: Build
+    steps:
+    - checkout: self
+
+    - task: Docker@2
+      inputs:
+        command: buildAndPush
+        containerRegistry: 'ACR-Service-Connection'
+        repository: $(imageName)
+        dockerfile: '**/Dockerfile'
+        tags: |
+          $(Build.BuildId)
+
+    - script: |
+        echo "Listing repo files after Docker build:"
+        ls -la
+      displayName: 'List repo files'
+
+- stage: Deploy
+  dependsOn: BuildAndPush
+  jobs:
+  - job: DeployToAKS
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "Listing YAML files in working directory:"
+        ls -l $(System.DefaultWorkingDirectory)
+      displayName: 'Verify YAML file existence'
+
+    - script: |
+        # Update ACR name and build ID in deployment.yaml
+        sed -i 's|<ACR_NAME>|$(acrName)|g' $(System.DefaultWorkingDirectory)/deployment.yaml
+        sed -i 's|<BUILD_ID>|$(Build.BuildId)|g' $(System.DefaultWorkingDirectory)/deployment.yaml
+      displayName: 'Update deployment.yaml with ACR and Build ID'
+
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Azure Resource Manager'
+        azureSubscriptionEndpoint: 'AKS-Service-Connection'
+        azureResourceGroup: 'my-rg'           # Update with your actual resource group name
+        kubernetesCluster: 'my-aks'           # Update with your actual AKS cluster name
+        namespace: $(kubernetesNamespace)
+        command: apply
+        useConfigurationFile: false
+        arguments: >
+          -f $(System.DefaultWorkingDirectory)/deployment.yaml
+          -f $(System.DefaultWorkingDirectory)/service.yaml
+      displayName: 'Deploy to AKS using kubectl'
