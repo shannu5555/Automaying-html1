@@ -14,6 +14,7 @@ spec:
     spec:
       containers:
       - name: html-container
-        image: <ACR_NAME>.azurecr.io/html-app:$(Build.BuildId)
+        image: <ACR_NAME>.azurecr.io/html-app:<BUILD_ID>
         ports:
         - containerPort: 80
+
